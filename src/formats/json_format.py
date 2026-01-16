@@ -84,12 +84,28 @@ Always use the exact parameter names as specified in the tool definitions."""
         return tool_calls
 
     def _extract_json_objects(self, text: str) -> list[str]:
-        """Extract potential JSON objects from text using brace matching."""
+        """Extract potential JSON objects from text using brace matching.
+
+        Properly handles braces inside quoted strings.
+        """
         objects = []
         depth = 0
         start = -1
+        in_string = False
+        escape = False
 
         for i, char in enumerate(text):
+            if escape:
+                escape = False
+                continue
+            if char == "\\" and in_string:
+                escape = True
+                continue
+            if char == '"' and not escape:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
             if char == "{":
                 if depth == 0:
                     start = i

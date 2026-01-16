@@ -70,10 +70,9 @@ class MetricsCalculator:
         # Success rates
         metrics.parse_success_rate = metrics.successful_parses / metrics.total_runs
 
-        # Tool accuracy
-        tool_accuracies = [r.tool_accuracy for r in results if r.parse_success]
-        if tool_accuracies:
-            metrics.tool_accuracy = sum(tool_accuracies) / len(tool_accuracies)
+        # Tool accuracy - include ALL results, treating failed parses as 0
+        tool_accuracies = [r.tool_accuracy if r.parse_success else 0.0 for r in results]
+        metrics.tool_accuracy = sum(tool_accuracies) / len(tool_accuracies)
 
         # Latency
         latencies = [r.latency_ms for r in results if r.latency_ms > 0]
@@ -87,6 +86,11 @@ class MetricsCalculator:
 
         # By model
         metrics.by_model = self._calculate_by_group(results, lambda r: r.model)
+
+        # By category (filter out results without category)
+        results_with_category = [r for r in results if r.category]
+        if results_with_category:
+            metrics.by_category = self._calculate_by_group(results_with_category, lambda r: r.category)
 
         return metrics
 
@@ -109,7 +113,8 @@ class MetricsCalculator:
             total = len(group_results)
             successful = sum(1 for r in group_results if r.parse_success)
 
-            tool_accuracies = [r.tool_accuracy for r in group_results if r.parse_success]
+            # Include ALL results in accuracy, treating failed parses as 0
+            tool_accuracies = [r.tool_accuracy if r.parse_success else 0.0 for r in group_results]
             avg_tool_accuracy = sum(tool_accuracies) / len(tool_accuracies) if tool_accuracies else 0.0
 
             latencies = [r.latency_ms for r in group_results if r.latency_ms > 0]

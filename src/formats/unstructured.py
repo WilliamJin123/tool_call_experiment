@@ -75,12 +75,14 @@ Only use this format when you want to call a tool. For regular responses, just r
         return tool_calls
 
     def _parse_parameter_list(self, params_text: str) -> dict[str, Any]:
-        """Parse parameters from a list format."""
+        """Parse parameters from a list format, including multi-line values."""
         arguments = {}
 
-        # Pattern: - param_name: value
-        param_pattern = r"-\s*(\w+)\s*:\s*(.+?)(?=\n-|\n\n|\Z)"
-        matches = re.findall(param_pattern, params_text, re.DOTALL)
+        # Pattern: - param_name: value (value can span multiple lines)
+        # Use [\s\S] to match any character including newlines
+        # Look ahead for next parameter line, empty line, or end of string
+        param_pattern = r"-\s*(\w+)\s*:\s*([\s\S]+?)(?=\n\s*-\s*\w+\s*:|\n\n|\Z)"
+        matches = re.findall(param_pattern, params_text)
 
         for param_name, value in matches:
             arguments[param_name.strip()] = self._parse_value(value.strip())

@@ -43,6 +43,64 @@ IMPORTANT:
 You may call multiple functions, each on its own line.
 Only include function calls when you want to use a tool. For regular responses, just reply normally."""
 
+    def _extract_function_calls(self, text: str) -> list[tuple[str, str]]:
+        """Extract function calls with proper nested parentheses support.
+
+        Returns a list of (function_name, arguments_text) tuples.
+        """
+        results = []
+        i = 0
+        while i < len(text):
+            # Find a potential function name (identifier followed by '(')
+            match = re.match(r"(\w+)\s*\(", text[i:])
+            if not match:
+                i += 1
+                continue
+
+            func_name = match.group(1)
+            start_paren = i + match.end() - 1  # Position of '('
+
+            # Find matching closing parenthesis with proper nesting
+            depth = 1
+            j = start_paren + 1
+            in_string = False
+            string_char = None
+            escape = False
+
+            while j < len(text) and depth > 0:
+                char = text[j]
+
+                if escape:
+                    escape = False
+                    j += 1
+                    continue
+                if char == "\\" and in_string:
+                    escape = True
+                    j += 1
+                    continue
+                if char in "\"'" and not in_string:
+                    in_string = True
+                    string_char = char
+                elif char == string_char and in_string:
+                    in_string = False
+                    string_char = None
+                elif not in_string:
+                    if char == "(":
+                        depth += 1
+                    elif char == ")":
+                        depth -= 1
+
+                j += 1
+
+            if depth == 0:
+                args_text = text[start_paren + 1 : j - 1]
+                results.append((func_name, args_text))
+                i = j  # Continue after this function call
+            else:
+                i += 1  # No matching paren found, move on
+
+        return results
+
     def _format_as_function(self, tool: Tool) -> str:
         """Format a tool as a function signature."""
         params = []
@@ -64,15 +122,12 @@ Only include function calls when you want to use a tool. For regular responses, 
         tool_calls = []
         seen_raw_texts = set()
 
-        # Pattern for function calls: name(args)
-        # Match function calls, being careful with nested parentheses
-        func_pattern = r"(\w+)\s*\(([^)]*(?:\([^)]*\)[^)]*)*)\)"
-
         # Also check code blocks
         code_blocks = re.findall(r"```(?:python)?\s*(.*?)\s*```", response, re.DOTALL)
         text_to_search = response + "\n" + "\n".join(code_blocks)
 
-        matches = re.findall(func_pattern, text_to_search)
+        # Use iterative parsing for proper nested parentheses support
+        matches = self._extract_function_calls(text_to_search)
 
         for func_name, args_text in matches:
             # Skip common Python built-ins and non-tool calls

@@ -1,11 +1,14 @@
 """Token usage tracking and aggregation."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 import json
 from pathlib import Path
 
 import tiktoken
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -100,6 +103,9 @@ class TokenTracker:
         """Record usage from an API response object."""
         # Extract token counts from API response
         usage = response.usage if hasattr(response, "usage") else None
+
+        if usage is None:
+            logger.warning(f"No usage data in response for {model}/{format_type}/{prompt_id}")
 
         token_usage = TokenUsage(
             model=model,
@@ -207,6 +213,7 @@ class TokenTracker:
     def export_results(self, path: str | Path) -> None:
         """Export token usage data to JSON file."""
         path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         data = {
             "records": [r.to_dict() for r in self.usage_records],
@@ -223,6 +230,7 @@ class TokenTracker:
         import csv
 
         path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         fieldnames = [
             "model",
@@ -245,4 +253,8 @@ class TokenTracker:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             for record in self.usage_records:
-                writer.writerow(record.to_dict())
+                row = record.to_dict()
+                # Handle infinity values in CSV (same as to_dict handles for JSON)
+                if row.get("format_overhead_ratio") == float("inf"):
+                    row["format_overhead_ratio"] = None
+                writer.writerow(row)

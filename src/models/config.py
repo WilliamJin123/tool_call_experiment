@@ -59,12 +59,12 @@ CEREBRAS_MODELS = [
 GROQ_MODELS = [
     ModelConfig(
         provider="groq",
-        model_id="groq/compound",
+        model_id="compound",
         display_name="Groq Compound",
     ),
     ModelConfig(
         provider="groq",
-        model_id="groq/compound-mini",
+        model_id="compound-mini",
         display_name="Groq Compound Mini",
     ),
     ModelConfig(

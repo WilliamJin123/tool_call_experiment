@@ -1,10 +1,13 @@
 """Evaluation runner for tool call format testing."""
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 import time
 import json
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from src.formats.base import BaseFormat, ToolCall
 from src.tools.base import Tool
@@ -47,14 +50,26 @@ class EvaluationResult:
     expected_tools: list[str] = field(default_factory=list)
     actual_tools: list[str] = field(default_factory=list)
 
+    # Prompt category for grouping
+    category: str = ""
+
     @property
     def tool_accuracy(self) -> float:
-        """Accuracy of tool selection."""
-        if not self.expected_tools:
-            return 1.0 if not self.actual_tools else 0.0
+        """Accuracy of tool selection using Jaccard similarity."""
+        expected_set = set(self.expected_tools)
+        actual_set = set(self.actual_tools)
 
-        correct = sum(1 for t in self.actual_tools if t in self.expected_tools)
-        return correct / len(self.expected_tools)
+        # Both empty = perfect match
+        if not expected_set and not actual_set:
+            return 1.0
+        # One empty, other not = no match
+        if not expected_set or not actual_set:
+            return 0.0
+
+        # Jaccard similarity: intersection / union
+        intersection = len(expected_set & actual_set)
+        union = len(expected_set | actual_set)
+        return intersection / union
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
@@ -62,6 +77,7 @@ class EvaluationResult:
             "model": self.model,
             "format_type": self.format_type,
             "prompt_id": self.prompt_id,
+            "category": self.category,
             "response_text": self.response_text,
             "parsed_calls": [{"name": c.name, "arguments": c.arguments} for c in self.parsed_calls],
             "parse_success": self.parse_success,
@@ -114,7 +130,7 @@ class EvaluationRunner:
         # Get client
         client = model_config.get_client()
 
-        # Make API call
+        # Make API call - track latency even on errors
         start_time = time.time()
 
         try:
@@ -131,6 +147,7 @@ class EvaluationRunner:
             response_text = response.choices[0].message.content or ""
 
         except Exception as e:
+            latency_ms = (time.time() - start_time) * 1000
             return EvaluationResult(
                 model=model_key,
                 format_type=format_name,
@@ -139,6 +156,8 @@ class EvaluationRunner:
                 parse_success=False,
                 parse_error=f"API error: {str(e)}",
                 expected_tools=prompt.expected_tool_names,
+                latency_ms=latency_ms,
+                category=prompt.category,
             )
 
         # Parse response
@@ -203,6 +222,7 @@ class EvaluationRunner:
             latency_ms=latency_ms,
             expected_tools=prompt.expected_tool_names,
             actual_tools=[c.name for c in valid_calls],
+            category=prompt.category,
         )
 
         self.results.append(result)
@@ -233,8 +253,23 @@ class EvaluationRunner:
                     try:
                         self.run_single(model_key, format_name, prompt_id)
                     except Exception as e:
-                        # Log error but continue
-                        print(f"Error in {model_key}/{format_name}/{prompt_id}: {e}")
+                        # Log error and store error result instead of skipping
+                        logger.error(f"Failed: {model_key}/{format_name}/{prompt_id}: {e}")
+                        prompt = self.prompts.get(prompt_id)
+                        expected_tools = prompt.expected_tool_names if prompt else []
+                        category = prompt.category if prompt else ""
+                        self.results.append(
+                            EvaluationResult(
+                                model=model_key,
+                                format_type=format_name,
+                                prompt_id=prompt_id,
+                                response_text="",
+                                parse_success=False,
+                                parse_error=f"Exception: {str(e)}",
+                                expected_tools=expected_tools,
+                                category=category,
+                            )
+                        )
 
         return self.results
 
@@ -245,6 +280,7 @@ class EvaluationRunner:
     def export_results(self, path: str | Path) -> None:
         """Export evaluation results to JSON."""
         path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
 
         data = {
             "results": [r.to_dict() for r in self.results],

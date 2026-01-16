@@ -1,5 +1,6 @@
 """XML format for tool calls."""
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from typing import Any
@@ -152,8 +153,6 @@ Only include XML when you want to call a tool. For regular responses, just reply
         # Try to parse as JSON (for embedded arrays/objects)
         if text.startswith("[") or text.startswith("{"):
             try:
-                import json
-
                 return json.loads(text)
             except Exception:
                 pass
