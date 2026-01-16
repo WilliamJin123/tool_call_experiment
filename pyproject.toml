@@ -1,0 +1,29 @@
+[project]
+name = "tool-call-experiment"
+version = "0.1.0"
+description = "Test and compare different tool call formats across various LLMs"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "keycycle",
+    "tiktoken",
+    "openai",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
