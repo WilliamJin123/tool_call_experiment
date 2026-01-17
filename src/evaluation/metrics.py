@@ -74,6 +74,10 @@ class MetricsCalculator:
         tool_accuracies = [r.tool_accuracy if r.parse_success else 0.0 for r in results]
         metrics.tool_accuracy = sum(tool_accuracies) / len(tool_accuracies)
 
+        # Param accuracy - include ALL results, treating failed parses as 0
+        param_accuracies = [r.param_accuracy if r.parse_success else 0.0 for r in results]
+        metrics.param_accuracy = sum(param_accuracies) / len(param_accuracies)
+
         # Latency
         latencies = [r.latency_ms for r in results if r.latency_ms > 0]
         if latencies:
@@ -117,6 +121,9 @@ class MetricsCalculator:
             tool_accuracies = [r.tool_accuracy if r.parse_success else 0.0 for r in group_results]
             avg_tool_accuracy = sum(tool_accuracies) / len(tool_accuracies) if tool_accuracies else 0.0
 
+            param_accuracies = [r.param_accuracy if r.parse_success else 0.0 for r in group_results]
+            avg_param_accuracy = sum(param_accuracies) / len(param_accuracies) if param_accuracies else 0.0
+
             latencies = [r.latency_ms for r in group_results if r.latency_ms > 0]
             avg_latency = sum(latencies) / len(latencies) if latencies else 0.0
 
@@ -125,6 +132,7 @@ class MetricsCalculator:
                 "successful": successful,
                 "success_rate": successful / total if total > 0 else 0.0,
                 "tool_accuracy": avg_tool_accuracy,
+                "param_accuracy": avg_param_accuracy,
                 "avg_latency_ms": avg_latency,
             }
 

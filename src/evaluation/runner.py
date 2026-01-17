@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 from src.formats.base import BaseFormat, ToolCall
 from src.tools.base import Tool
-from src.prompts.base import EvalPrompt
+from src.prompts.base import EvalPrompt, ExpectedToolCall
 from src.models.config import ModelConfig
 from src.tokens.tracker import TokenTracker, TokenUsage
 from src.tokens.counter import count_tokens
@@ -48,6 +48,7 @@ class EvaluationResult:
 
     # Expected vs actual
     expected_tools: list[str] = field(default_factory=list)
+    expected_calls: list[ExpectedToolCall] = field(default_factory=list)
     actual_tools: list[str] = field(default_factory=list)
 
     # Prompt category for grouping
@@ -71,6 +72,30 @@ class EvaluationResult:
         union = len(expected_set | actual_set)
         return intersection / union
 
+    @property
+    def param_accuracy(self) -> float:
+        """Accuracy of parameters (and tool selection) using matching logic."""
+        if not self.expected_calls and not self.valid_calls:
+            return 1.0
+
+        if not self.expected_calls or not self.valid_calls:
+            return 0.0
+
+        matched_count = 0
+        # Create a copy to track used calls
+        available_actuals = list(self.valid_calls)
+
+        for expected in self.expected_calls:
+            for actual in available_actuals:
+                if expected.matches(actual.name, actual.arguments):
+                    matched_count += 1
+                    available_actuals.remove(actual)
+                    break
+
+        # Use max(expected, actual) to penalize both missing and extra calls
+        denominator = max(len(self.expected_calls), len(self.valid_calls))
+        return matched_count / denominator if denominator > 0 else 0.0
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for serialization."""
         return {
@@ -89,6 +114,7 @@ class EvaluationResult:
             "expected_tools": self.expected_tools,
             "actual_tools": self.actual_tools,
             "tool_accuracy": self.tool_accuracy,
+            "param_accuracy": self.param_accuracy,
         }
 
 
@@ -221,6 +247,7 @@ class EvaluationRunner:
             token_usage=token_usage,
             latency_ms=latency_ms,
             expected_tools=prompt.expected_tool_names,
+            expected_calls=prompt.expected_calls,
             actual_tools=[c.name for c in valid_calls],
             category=prompt.category,
         )

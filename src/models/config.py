@@ -40,18 +40,8 @@ CEREBRAS_MODELS = [
     ),
     ModelConfig(
         provider="cerebras",
-        model_id="qwen-3-235b-a22b-instruct-2507",
-        display_name="Cerebras Qwen 3 235B",
-    ),
-    ModelConfig(
-        provider="cerebras",
         model_id="zai-glm-4.6",
         display_name="Cerebras ZAI-GLM 4.6",
-    ),
-    ModelConfig(
-        provider="cerebras",
-        model_id="llama-3.3-70b",
-        display_name="Cerebras Llama 3.3 70B",
     ),
 ]
 
@@ -64,27 +54,8 @@ GROQ_MODELS = [
     ),
     ModelConfig(
         provider="groq",
-        model_id="compound-mini",
-        display_name="Groq Compound Mini",
-    ),
-    ModelConfig(
-        provider="groq",
-        model_id="meta-llama/llama-4-scout-17b-16e-instruct",
-        display_name="Groq Llama 4 Scout",
-    ),
-    ModelConfig(
-        provider="groq",
         model_id="moonshotai/kimi-k2-instruct-0905",
         display_name="Groq Kimi K2",
-    ),
-]
-
-# Gemini models
-GEMINI_MODELS = [
-    ModelConfig(
-        provider="gemini",
-        model_id="gemini-2.5-flash",
-        display_name="Gemini 2.5 Flash",
     ),
 ]
 
@@ -103,7 +74,7 @@ COHERE_MODELS = [
 ]
 
 # All models combined
-ALL_MODELS = CEREBRAS_MODELS + GROQ_MODELS + GEMINI_MODELS + COHERE_MODELS
+ALL_MODELS = CEREBRAS_MODELS + GROQ_MODELS + COHERE_MODELS
 
 
 def get_all_models() -> list[ModelConfig]:
@@ -119,8 +90,6 @@ def get_models_by_provider(provider: str) -> list[ModelConfig]:
             return CEREBRAS_MODELS
         case "groq":
             return GROQ_MODELS
-        case "gemini":
-            return GEMINI_MODELS
         case "cohere":
             return COHERE_MODELS
         case _:

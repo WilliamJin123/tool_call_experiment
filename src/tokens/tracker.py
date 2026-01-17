@@ -1,6 +1,7 @@
 """Token usage tracking and aggregation."""
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from typing import Any
 import json
@@ -70,11 +71,15 @@ class TokenUsage:
 
 @dataclass
 class TokenTracker:
-    """Track and aggregate token usage across experiments."""
+    """Track and aggregate token usage across experiments.
+
+    Thread-safe: all record operations are protected by a lock.
+    """
 
     encoding_name: str = "cl100k_base"
     usage_records: list[TokenUsage] = field(default_factory=list)
     _encoder: Any = field(default=None, repr=False)
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
     def __post_init__(self):
         self._encoder = tiktoken.get_encoding(self.encoding_name)
@@ -84,8 +89,9 @@ class TokenTracker:
         return len(self._encoder.encode(text))
 
     def record_usage(self, usage: TokenUsage) -> None:
-        """Record a token usage entry."""
-        self.usage_records.append(usage)
+        """Record a token usage entry (thread-safe)."""
+        with self._lock:
+            self.usage_records.append(usage)
 
     def record_from_response(
         self,
@@ -126,10 +132,13 @@ class TokenTracker:
         return token_usage
 
     def get_summary_by_format(self) -> dict[str, dict[str, float]]:
-        """Aggregate statistics by format type."""
+        """Aggregate statistics by format type (thread-safe)."""
+        with self._lock:
+            records = list(self.usage_records)
+
         by_format: dict[str, list[TokenUsage]] = {}
 
-        for record in self.usage_records:
+        for record in records:
             if record.format_type not in by_format:
                 by_format[record.format_type] = []
             by_format[record.format_type].append(record)
@@ -156,10 +165,13 @@ class TokenTracker:
         return summaries
 
     def get_summary_by_model(self) -> dict[str, dict[str, float]]:
-        """Aggregate statistics by model."""
+        """Aggregate statistics by model (thread-safe)."""
+        with self._lock:
+            records = list(self.usage_records)
+
         by_model: dict[str, list[TokenUsage]] = {}
 
-        for record in self.usage_records:
+        for record in records:
             if record.model not in by_model:
                 by_model[record.model] = []
             by_model[record.model].append(record)
@@ -182,10 +194,13 @@ class TokenTracker:
         return summaries
 
     def get_summary_by_format_and_model(self) -> dict[str, dict[str, dict[str, float]]]:
-        """Aggregate statistics by format and model combination."""
+        """Aggregate statistics by format and model combination (thread-safe)."""
+        with self._lock:
+            records = list(self.usage_records)
+
         by_combo: dict[str, dict[str, list[TokenUsage]]] = {}
 
-        for record in self.usage_records:
+        for record in records:
             if record.format_type not in by_combo:
                 by_combo[record.format_type] = {}
             if record.model not in by_combo[record.format_type]:
@@ -211,12 +226,15 @@ class TokenTracker:
         return summaries
 
     def export_results(self, path: str | Path) -> None:
-        """Export token usage data to JSON file."""
+        """Export token usage data to JSON file (thread-safe)."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        with self._lock:
+            records = list(self.usage_records)
+
         data = {
-            "records": [r.to_dict() for r in self.usage_records],
+            "records": [r.to_dict() for r in records],
             "summary_by_format": self.get_summary_by_format(),
             "summary_by_model": self.get_summary_by_model(),
             "summary_by_format_and_model": self.get_summary_by_format_and_model(),
@@ -226,11 +244,14 @@ class TokenTracker:
             json.dump(data, f, indent=2)
 
     def export_csv(self, path: str | Path) -> None:
-        """Export token usage data to CSV file."""
+        """Export token usage data to CSV file (thread-safe)."""
         import csv
 
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
+
+        with self._lock:
+            records = list(self.usage_records)
 
         fieldnames = [
             "model",
@@ -252,7 +273,7 @@ class TokenTracker:
         with open(path, "w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            for record in self.usage_records:
+            for record in records:
                 row = record.to_dict()
                 # Handle infinity values in CSV (same as to_dict handles for JSON)
                 if row.get("format_overhead_ratio") == float("inf"):
